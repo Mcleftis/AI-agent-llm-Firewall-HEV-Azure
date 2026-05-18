@@ -36,7 +36,7 @@ jobs:
         run: python -m pytest testing/unit/ -v --html=reports/unit_report.html
 
       - name: Run Bandit SAST
-        run: bandit -r . -ll -ii -f html -o reports/bandit_report.html || true
+        run: bandit -r . -ll -ii -f html -o reports/bandit_report.html
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
@@ -48,11 +48,11 @@ jobs:
   build-and-push:
     name: DAST, Build & Push Container Image
     runs-on: ubuntu-latest
+    needs: [quality-assurance]
+    if: github.ref == 'refs/heads/main'
     permissions:
       issues: write
       contents: read
-    needs: [quality-assurance]
-    if: github.ref == 'refs/heads/main'
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
@@ -63,19 +63,10 @@ jobs:
       - name: Wait for Services
         run: sleep 20
 
-      - name: Wait for Services
-        run: sleep 20
-
       - name: Check Container Status & Logs
         run: |
           docker compose ps
-          docker compose logs  
-
-      - name: OWASP ZAP Scan Key Generator
-        uses: zaproxy/action-baseline@v0.11.0
-        with:
-          target: 'http://localhost:8501'
-          fail_action: false
+          docker compose logs
 
       - name: OWASP ZAP Scan Gateway
         uses: zaproxy/action-baseline@v0.11.0
@@ -85,5 +76,3 @@ jobs:
 
       - name: Stop Containers
         run: docker compose down
-
-        
