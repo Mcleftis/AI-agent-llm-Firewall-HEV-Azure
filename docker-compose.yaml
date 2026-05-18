@@ -21,7 +21,7 @@ services:
     container_name: key_factory
     ports: 
       - "127.0.0.1:8501:8501"
-    command: streamlit run key_generator.py --server.port 8501 --server.address 0.0.0.0
+    command: streamlit run security/key_generator.py --server.port 8501 --server.address 0.0.0.0
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
@@ -48,3 +48,5 @@ services:
 networks:
   hev_net:
     driver: bridge
+
+    
