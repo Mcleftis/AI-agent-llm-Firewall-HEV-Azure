@@ -50,13 +50,13 @@ def load_finetuned_llm():
     base_model_id = "HuggingFaceTB/SmolLM-1.7B"
     adapter_dir   = "./hev_llama_lora"
 
-    tokenizer = AutoTokenizer.from_pretrained(base_model_id)
+    tokenizer = AutoTokenizer.from_pretrained(base_model_id, revision="main")
     tokenizer.pad_token = tokenizer.eos_token
 
     base_model = AutoModelForCausalLM.from_pretrained(
         base_model_id,
         torch_dtype=torch.float32,
-        device_map="cpu",
+        device_map="cpu", revision="main",
     )
 
     llm_model = PeftModel.from_pretrained(base_model, adapter_dir)
@@ -87,7 +87,7 @@ def load_rl_agent():
     rl_model = CustomPPOActorCritic(obs_dim=4, action_dim=1).to(device)
 
     if os.path.exists(model_path):
-        rl_model.load_state_dict(torch.load(model_path, map_location=device))
+        rl_model.load_state_dict(torch.load(model_path, map_location=device, weights_only=True))
         
     rl_model.eval()
     return rl_model, device

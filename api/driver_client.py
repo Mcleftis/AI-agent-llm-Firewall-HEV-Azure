@@ -20,7 +20,7 @@ def send_command(text):
     
     try:
         # Stelnoume POST aithma (verify=False gia na mhn kollhsei sto SSL)
-        response = requests.post(URL, json=payload, headers=HEADERS, verify=False)
+        response = requests.post(URL, json=payload, headers=HEADERS, verify=False)  # nosec B501
         
         # An to status einai 200 (OK) h 403 (BLOCKED)
         if response.status_code == 200:

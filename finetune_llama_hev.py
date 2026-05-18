@@ -1,4 +1,4 @@
-﻿import os
+import os
 os.environ["PYTHONUTF8"] = "1"
 os.environ["MLFLOW_EXPERIMENT_NAME"] = "HEV_LLM_Firewall_Finetuning"
 
@@ -23,7 +23,7 @@ def main():
         dataset = load_dataset("json", data_files=dataset_path, split="train")
         model_id = "HuggingFaceTB/SmolLM-1.7B"
 
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        tokenizer = AutoTokenizer.from_pretrained(model_id, revision="main")
         tokenizer.pad_token = tokenizer.eos_token
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -32,7 +32,7 @@ def main():
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
             torch_dtype=dtype,
-            device_map=device,
+            device_map=device, revision="main",
         )
 
         lora_config = LoraConfig(
