@@ -48,6 +48,9 @@ jobs:
   build-and-push:
     name: DAST, Build & Push Container Image
     runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
     needs: [quality-assurance]
     if: github.ref == 'refs/heads/main'
     steps:
@@ -82,3 +85,5 @@ jobs:
 
       - name: Stop Containers
         run: docker compose down
+
+        
