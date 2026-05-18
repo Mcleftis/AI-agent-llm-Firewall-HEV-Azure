@@ -1,0 +1,2 @@
+{"text": "### User: Βιάζομαι πολύ να φτάσω νοσοκομείο ### Assistant: {\"urgency\": 5, \"intent\": \"emergency\"}"}
+{"text": "### User: Πάμε χαλαρά μια βόλτα ### Assistant: {\"urgency\": 1, \"intent\": \"leisure\"}"}

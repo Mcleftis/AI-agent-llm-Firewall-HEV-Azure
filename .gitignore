@@ -21,6 +21,14 @@ __pycache__/
 *.dll
 *.so
 *.exe
+.env
+*.lnk
+*.ps1
+__pycache__/
+*.pem
+vault/
+.pytest_cache/
+reports/
 
 # Build output
 target/

@@ -1,88 +1,81 @@
-﻿import torch
-from datasets import Dataset
+﻿import os
+os.environ["PYTHONUTF8"] = "1"
+os.environ["MLFLOW_EXPERIMENT_NAME"] = "HEV_LLM_Firewall_Finetuning"
+
+import torch
+import mlflow
+from datasets import load_dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from peft import LoraConfig, get_peft_model
 from trl import SFTTrainer, SFTConfig
 
-# ── DATASET ───────────────────────────────────────────────────────────────────
-raw_data = [
-    "### User: Βιάζομαι πολύ να φτάσω νοσοκομείο ### Assistant: {\"urgency\": 5, \"intent\": \"emergency\"}",
-    "### User: Πάμε χαλαρά μια βόλτα ### Assistant: {\"urgency\": 1, \"intent\": \"leisure\"}",
-    "### User: Έχω αργήσει στη δουλειά ### Assistant: {\"urgency\": 4, \"intent\": \"work_rush\"}",
-    "### User: Τρέχα γρήγορα είναι επείγον ### Assistant: {\"urgency\": 5, \"intent\": \"emergency\"}",
-    "### User: Πήγαινέ με στο αεροδρόμιο με την ησυχία μου ### Assistant: {\"urgency\": 2, \"intent\": \"leisure\"}",
-]
+def main():
+    mlflow.set_experiment(os.environ["MLFLOW_EXPERIMENT_NAME"])
+    with mlflow.start_run() as run:
+        dataset_path = "data/hev_intents.jsonl"
 
-# Νέο TRL API: το dataset πρέπει να έχει "messages" ή απλά να κάνουμε
-# tokenization χειροκίνητα με "input_ids". Ο πιο απλός τρόπος:
-# δίνουμε "text" και το tokenize μόνοι μας.
-dataset = Dataset.from_dict({"text": raw_data})
+        if not os.path.exists("data"):
+            os.makedirs("data")
+            with open(dataset_path, "w", encoding="utf-8") as f:
+                f.write('{"text": "### User: Βιάζομαι πολύ να φτάσω νοσοκομείο ### Assistant: {\\"urgency\\\": 5, \\\"intent\\\": \\\"emergency\\\"}"}\n')
+                f.write('{"text": "### User: Πάμε χαλαρά μια βόλτα ### Assistant: {\\"urgency\\\": 1, \\\"intent\\\": \\\"leisure\\\"}"}\n')
 
-# ── TOKENIZER ─────────────────────────────────────────────────────────────────
-model_id = "HuggingFaceTB/SmolLM-1.7B"
+        dataset = load_dataset("json", data_files=dataset_path, split="train")
+        model_id = "HuggingFaceTB/SmolLM-1.7B"
 
-print("[1/4] Φόρτωση tokenizer...")
-tokenizer = AutoTokenizer.from_pretrained(model_id)
-tokenizer.pad_token = tokenizer.eos_token
-tokenizer.padding_side = "right"
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        tokenizer.pad_token = tokenizer.eos_token
 
-# ── TOKENIZE DATASET (νέο API — χωρίς dataset_text_field) ────────────────────
-def tokenize(batch):
-    return tokenizer(
-        batch["text"],
-        truncation=True,
-        max_length=128,
-        padding="max_length",
-    )
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        dtype = torch.float16 if device == "cuda" else torch.float32
 
-tokenized_dataset = dataset.map(tokenize, batched=True, remove_columns=["text"])
-# Το SFTTrainer με pre-tokenized dataset θέλει "input_ids" ως labels
-tokenized_dataset = tokenized_dataset.map(lambda x: {"labels": x["input_ids"]})
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id,
+            torch_dtype=dtype,
+            device_map=device,
+        )
 
-# ── MODEL ─────────────────────────────────────────────────────────────────────
-print("[2/4] Φόρτωση μοντέλου (CPU)...")
-model = AutoModelForCausalLM.from_pretrained(
-    model_id,
-    dtype=torch.float32,   # float32 για CPU — float16 χρειάζεται CUDA
-    device_map="cpu",
-)
+        lora_config = LoraConfig(
+            r=8,
+            lora_alpha=16,
+            target_modules=["q_proj", "v_proj"],
+            lora_dropout=0.05,
+            bias="none",
+            task_type="CAUSAL_LM",
+        )
+        model = get_peft_model(model, lora_config)
 
-# ── LoRA ──────────────────────────────────────────────────────────────────────
-print("[3/4] Εφαρμογή LoRA adapters...")
-lora_config = LoraConfig(
-    r=8,
-    lora_alpha=16,
-    target_modules=["q_proj", "v_proj"],
-    lora_dropout=0.05,
-    bias="none",
-    task_type="CAUSAL_LM",
-)
-model = get_peft_model(model, lora_config)
-model.print_trainable_parameters()
+        mlflow.log_params({
+            "model_id": model_id,
+            "lora_r": lora_config.r,
+            "lora_alpha": lora_config.lora_alpha,
+            "device": device,
+            "dtype": str(dtype)
+        })
 
-# ── TRAINING ──────────────────────────────────────────────────────────────────
-print("[4/4] Fine-Tuning σε εξέλιξη...")
-trainer = SFTTrainer(
-    model=model,
-    train_dataset=tokenized_dataset,
-    args=SFTConfig(
-        per_device_train_batch_size=1,
-        gradient_accumulation_steps=4,
-        max_steps=20,            # Αύξησε σε 100 για production
-        learning_rate=2e-4,
-        fp16=False,              # False σε CPU
-        bf16=False,
-        output_dir="outputs_hev_lora",
-        logging_steps=5,
-        save_steps=20,
-        report_to="none",        # Απενεργοποιεί wandb
-    ),
-)
+        training_args = SFTConfig(
+            per_device_train_batch_size=2,
+            gradient_accumulation_steps=4,
+            max_steps=20,
+            learning_rate=2e-4,
+            fp16=(device == "cuda"),
+            bf16=False,
+            output_dir="outputs_hev_lora",
+            logging_steps=5,
+            save_steps=20,
+            report_to="mlflow",
+        )
 
-trainer.train()
+        trainer = SFTTrainer(
+            model=model,
+            train_dataset=dataset,
+            args=training_args,
+        )
 
-# ── SAVE ──────────────────────────────────────────────────────────────────────
-print("\n[DONE] Αποθήκευση LoRA adapters...")
-trainer.model.save_pretrained("hev_llama_lora")
-tokenizer.save_pretrained("hev_llama_lora")
-print("[DONE] Αποθηκεύτηκε στο: hev_llama_lora/")
+        trainer.train()
+
+        trainer.model.save_pretrained("outputs_hev_lora/final_model")
+        tokenizer.save_pretrained("outputs_hev_lora/final_model")
+
+if __name__ == "__main__":
+    main()

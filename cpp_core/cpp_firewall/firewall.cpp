@@ -1,57 +1,85 @@
-#include <iostream>
-#include <string>
+#include <cstdint>
 #include <cstring>
-#include <atomic>
-#include <vector>
+#include <string>
+#include <unordered_set>
 #include <algorithm>
+#include <atomic>
 
 #ifdef _WIN32
     #define DLL_EXPORT __declspec(dllexport)
 #else
-    #define DLL_EXPORT
+    #define DLL_EXPORT __attribute__((visibility("default")))
 #endif
 
-const uint32_t SPOOFED_CAN_ID = 0x666;
-const uint32_t MAX_STANDARD_CAN_ID = 0x7FF;
-const float MIN_SAFE_SENSOR_VAL = -1000.0f;
-const float MAX_SAFE_SENSOR_VAL = 10000.0f;
+std::atomic<uint64_t> blocked_requests{0};
 
-std::atomic<size_t> BLOCKED_COUNT(0);
-
-const std::vector<std::string> MALICIOUS_PAYLOADS = {
-    "MAX_THROTTLE", "DROP", "fuzz", "ignore all previous instructions", "system failure", "override"
+const std::unordered_set<std::string> malicious_signatures = {
+    "max_throttle", "drop", "fuzz", "override"
 };
 
 extern "C" {
-    DLL_EXPORT int inspect_can_packet(uint32_t packet_id, const unsigned char* payload, size_t payload_length) {
-        if (payload == nullptr) { BLOCKED_COUNT++; return 0; }
-        size_t required_size = sizeof(float) + sizeof(uint32_t);
-        if (payload_length < required_size) { BLOCKED_COUNT++; return 0; }
+    DLL_EXPORT int inspect_can_packet(uint32_t packet_id, const uint8_t* payload, size_t payload_length) {
+        if (!payload || payload_length < 8) {
+            blocked_requests++;
+            return 0;
+        }
 
         float sensor_value;
         uint32_t message_counter;
         std::memcpy(&sensor_value, payload, sizeof(float));
         std::memcpy(&message_counter, payload + sizeof(float), sizeof(uint32_t));
 
-        if (packet_id == SPOOFED_CAN_ID || packet_id > MAX_STANDARD_CAN_ID) { BLOCKED_COUNT++; return 0; }
-        if (sensor_value < MIN_SAFE_SENSOR_VAL || sensor_value > MAX_SAFE_SENSOR_VAL) { BLOCKED_COUNT++; return 0; }
+        if (packet_id == 0x666 || packet_id > 0x7FF) {
+            blocked_requests++;
+            return 0;
+        }
+
+        if (sensor_value < -1000.0f || sensor_value > 10000.0f) {
+            blocked_requests++;
+            return 0;
+        }
+
         return 1;
     }
 
     DLL_EXPORT int validate_api_command(const char* command) {
-        if (command == nullptr) return 0; 
-        std::string cmd(command);
-        std::transform(cmd.begin(), cmd.end(), cmd.begin(), ::tolower);
-        
-        for (const auto& payload : MALICIOUS_PAYLOADS) {
-            std::string lower_payload = payload;
-            std::transform(lower_payload.begin(), lower_payload.end(), lower_payload.begin(), ::tolower);
-            if (cmd.find(lower_payload) != std::string::npos) {
-                BLOCKED_COUNT++; return 0;
-            }
+        if (!command) {
+            blocked_requests++;
+            return 0;
         }
+
+        std::string cmd(command);
+        std::transform(cmd.begin(), cmd.end(), cmd.begin(), [](unsigned char c){ return std::tolower(c); });
+
+        if (malicious_signatures.find(cmd) != malicious_signatures.end()) {
+            blocked_requests++;
+            return 0;
+        }
+        
         return 1;
     }
 
-    DLL_EXPORT size_t get_firewall_stats() { return BLOCKED_COUNT.load(); }
+    DLL_EXPORT int apply_safety_guardrails(float* req_throttle, float* req_brake, float current_speed, float battery_soc) {
+        if (!req_throttle || !req_brake) return 0;
+
+        if (*req_brake > 0.05f && *req_throttle > 0.05f) {
+            *req_throttle = 0.0f;
+            return 1;
+        }
+
+        if (current_speed >= 180.0f && *req_throttle > 0.0f) {
+            *req_throttle = 0.0f;
+            return 1;
+        }
+
+        if (battery_soc < 5.0f && *req_throttle > 0.2f) {
+            *req_throttle = 0.2f;
+            return 1;
+        }
+
+        if (*req_throttle < 0.0f) *req_throttle = 0.0f;
+        if (*req_throttle > 1.0f) *req_throttle = 1.0f;
+
+        return 0;
+    }
 }

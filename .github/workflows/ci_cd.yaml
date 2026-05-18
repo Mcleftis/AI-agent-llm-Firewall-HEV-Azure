@@ -9,7 +9,7 @@ on:
 
 jobs:
   quality-assurance:
-    name: Build & Test (Linux Target)
+    name: Build, Test & SAST
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -24,51 +24,53 @@ jobs:
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r requirements.txt bandit pytest pytest-html
 
-      - name: Build C++ Core and Firewall (Linux Native)
+      - name: Build C++ Firewall
         run: |
-          # Compilation με τα νέα paths της αρχιτεκτονικής
-          g++ -shared -fPIC -o testing/unit/physics.so cpp_core/physics_solver.cpp -fopenmp
           g++ -shared -fPIC -o cpp_core/cpp_firewall/firewall.so cpp_core/cpp_firewall/firewall.cpp
 
-      - name: Run PyTest QA Suite
+      - name: Run PyTest
         env:
           PYTHONPATH: .
         run: python -m pytest testing/unit/ -v --html=reports/unit_report.html
 
-      - name: Upload Test Artifacts
+      - name: Run Bandit SAST
+        run: bandit -r . -ll -ii -f html -o reports/bandit_report.html || true
+
+      - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: QA-Test-Reports
+          name: Security-and-QA-Reports
           path: reports/
 
   build-and-push:
-    name: Build & Push Container Image
+    name: DAST, Build & Push Container Image
     runs-on: ubuntu-latest
-    needs: [quality-assurance] # ΑΥΣΤΗΡΟ DEPENDENCY - Δεν προχωράμε αν αποτύχει το QA
-    if: github.ref == 'refs/heads/main' # Κάνουμε push μόνο από το main branch
-
+    needs: [quality-assurance]
+    if: github.ref == 'refs/heads/main'
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+      - name: Start Containers for DAST
+        run: docker compose up -d --build
 
-      - name: Login to DockerHub
-        uses: docker/login-action@v2
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Wait for Services
+        run: sleep 20
 
-      - name: Build and Push Docker Image
-        uses: docker/build-push-action@v4
+      - name: OWASP ZAP Scan Key Generator
+        uses: zaproxy/action-baseline@v0.11.0
         with:
-          context: .
-          file: ./Dockerfile
-          push: true
-          tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/hev-ai-agent:latest
-            ${{ secrets.DOCKERHUB_USERNAME }}/hev-ai-agent:${{ github.sha }}
+          target: 'http://localhost:8501'
+          fail_action: false
+
+      - name: OWASP ZAP Scan Gateway
+        uses: zaproxy/action-baseline@v0.11.0
+        with:
+          target: 'https://localhost:443'
+          fail_action: false
+
+      - name: Stop Containers
+        run: docker compose down

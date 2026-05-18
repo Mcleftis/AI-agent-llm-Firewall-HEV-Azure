@@ -1,0 +1,50 @@
+services:
+  gateway:
+    build: .
+    container_name: soc_gateway
+    expose:
+      - "8502"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: streamlit run app.py --server.port 8502 --server.address 0.0.0.0
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    read_only: false
+    tmpfs:
+      - /tmp
+    networks:
+      - hev_net
+
+  key_generator:
+    build: .
+    container_name: key_factory
+    ports: 
+      - "127.0.0.1:8501:8501"
+    command: streamlit run key_generator.py --server.port 8501 --server.address 0.0.0.0
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    read_only: false
+    tmpfs:
+      - /tmp
+    networks:
+      - hev_net
+
+  secure_proxy:
+    image: nginx:alpine
+    container_name: nginx_tls
+    ports:
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+    depends_on:
+      - gateway
+    restart: unless-stopped
+    networks:
+      - hev_net
+
+networks:
+  hev_net:
+    driver: bridge
