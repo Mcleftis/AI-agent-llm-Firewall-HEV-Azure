@@ -4,8 +4,8 @@ import ctypes
 import time
 import uuid
 import streamlit as st
-from security_core import sign_payload, verify_signature, JWTManager
-from llm_firewall import query_llama_secure
+from security.security_core import sign_payload, verify_signature, JWTManager
+from security.llm_firewall import query_llama_secure
 
 st.set_page_config(page_title="HEV Security Gateway", layout="wide")
 
