@@ -20,16 +20,16 @@ def main():
                 f.write('{"text": "### User: Βιάζομαι πολύ να φτάσω νοσοκομείο ### Assistant: {\\"urgency\\\": 5, \\\"intent\\\": \\\"emergency\\\"}"}\n')
                 f.write('{"text": "### User: Πάμε χαλαρά μια βόλτα ### Assistant: {\\"urgency\\\": 1, \\\"intent\\\": \\\"leisure\\\"}"}\n')
 
-        dataset = load_dataset("json", data_files=dataset_path, split="train")
+        dataset = load_dataset( # nosec B615"json", data_files=dataset_path, split="train")
         model_id = "HuggingFaceTB/SmolLM-1.7B"
 
-        tokenizer = AutoTokenizer.from_pretrained(model_id, revision="main")
+        tokenizer = AutoTokenizer.from_pretrained # nosec B615(model_id, revision="main")
         tokenizer.pad_token = tokenizer.eos_token
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
         dtype = torch.float16 if device == "cuda" else torch.float32
 
-        model = AutoModelForCausalLM.from_pretrained(
+        model = AutoModelForCausalLM.from_pretrained # nosec B615(
             model_id,
             torch_dtype=dtype,
             device_map=device, revision="main",

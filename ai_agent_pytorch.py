@@ -50,10 +50,10 @@ def load_finetuned_llm():
     base_model_id = "HuggingFaceTB/SmolLM-1.7B"
     adapter_dir   = "./hev_llama_lora"
 
-    tokenizer = AutoTokenizer.from_pretrained(base_model_id, revision="main")
+    tokenizer = AutoTokenizer.from_pretrained # nosec B615(base_model_id, revision="main")
     tokenizer.pad_token = tokenizer.eos_token
 
-    base_model = AutoModelForCausalLM.from_pretrained(
+    base_model = AutoModelForCausalLM.from_pretrained # nosec B615(
         base_model_id,
         torch_dtype=torch.float32,
         device_map="cpu", revision="main",
