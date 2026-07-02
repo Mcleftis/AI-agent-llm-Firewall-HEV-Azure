@@ -1,0 +1,25 @@
+location: eastus
+type: Microsoft.App/containerApps
+name: prometheus-hybrid-ai
+resourceGroup: hybrid-ai-us
+properties:
+  managedEnvironmentId: hybrid-ai-env
+  configuration:
+    ingress:
+      external: false
+      targetPort: 9090
+  template:
+    containers:
+      - image: prom/prometheus:latest
+        name: prometheus
+        resources:
+          cpu: 0.5
+          memory: 1.0Gi
+        volumeMounts:
+          - volumeName: prometheus-config-vol
+            mountPath: /etc/prometheus/prometheus.yml
+            subPath: prometheus.yml
+    volumes:
+      - name: prometheus-config-vol
+        storageType: AzureFile
+        storageName: prometheus-storage

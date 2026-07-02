@@ -1,0 +1,17 @@
+location: eastus
+type: Microsoft.App/containerApps
+name: grafana-hybrid-ai
+resourceGroup: hybrid-ai-us
+properties:
+  managedEnvironmentId: hybrid-ai-env
+  configuration:
+    ingress:
+      external: true
+      targetPort: 3000
+  template:
+    containers:
+      - image: grafana/grafana:latest
+        name: grafana
+        resources:
+          cpu: 0.5
+          memory: 1.0Gi

@@ -48,3 +48,20 @@ data/*.csv
 
 # Temp
 tree_output.txt
+# --- added for GitHub backup: heavy generated artifacts (too big / not source) ---
+.venv/
+mlruns/
+MLOps/mlruns/
+
+# ML model weights & checkpoints (hundreds of MB - exceed GitHub 100MB limit)
+ml_pipeline/distilled_model/
+ml_pipeline/distilled_model_checkpoints/
+*.pt
+*.safetensors
+*.bin
+*.onnx
+
+# Terraform provider binaries & state
+**/.terraform/
+*.tfstate
+*.tfstate.*
